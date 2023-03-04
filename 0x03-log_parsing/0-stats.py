@@ -1,40 +1,52 @@
 #!/usr/bin/python3
-"""Performs log parsing from stdin"""
-
+'''reads stdin line by line and computes metrics'''
 import re
 import sys
-counter = 0
-file_size = 0
-statusC_counter = {200: 0, 301: 0, 400: 0,
-                   401: 0, 403: 0, 404: 0, 405: 0, 500: 0}
+import signal
 
 
-def printCodes(dict, file_s):
-    """Prints the status code and the number of times they appear"""
-    print("File size: {}".format(file_s))
-    for key in sorted(dict.keys()):
-        if statusC_counter[key] != 0:
-            print("{}: {}".format(key, dict[key]))
+toMatch = re.compile(
+                     r'^\d{1,3}\.\d{1,3}\.\d{1,3} \
+                     \.\d{1,3}\s\-\s\[[0-9]{4}\-[0-9] \
+                     {1,2}\-[0-9]{1,2}\s[0-9]{1,2}\: \
+                     [0-9]{1,2}\:[0-9]{1,2}.[0-9]{1,6}\] \
+                     \s\"GET\s\/projects\/260\sHTTP\/ \
+                     1\.1\"\s\d{3}\s\d{1,4}$')
+statusCodeTracker = {
+    '200': 0,
+    '301': 0,
+    '400': 0,
+    '401': 0,
+    '403': 0,
+    '404': 0,
+    '405': 0,
+    '500': 0
+}
+fileSizeTracker = 0
+lineCount = 0
 
 
-if __name__ == "__main__":
+def handler():
+    return True
+
+
+for line in sys.stdin:
+    lineCount += 1
+    if toMatch.match(line) is False:
+        continue
+    withoutDash = line.replace('-', '')
+    arrayFromString = withoutDash.split(' ')
     try:
-        for line in sys.stdin:
-            split_string = re.split('- |"|"| " " ', str(line))
-            statusC_and_file_s = split_string[-1]
-            if counter != 0 and counter % 10 == 0:
-                printCodes(statusC_counter, file_size)
-            counter = counter + 1
-            try:
-                statusC = int(statusC_and_file_s.split()[0])
-                f_size = int(statusC_and_file_s.split()[1])
-                # print("Status Code {} size {}".format(statusC, f_size))
-                if statusC in statusC_counter:
-                    statusC_counter[statusC] += 1
-                file_size = file_size + f_size
-            except:
-                pass
-        printCodes(statusC_counter, file_size)
-    except KeyboardInterrupt:
-        printCodes(statusC_counter, file_size)
-        raise
+        statusCode = int(arrayFromString[6])
+        if arrayFromString[5] and isinstance(int(arrayFromString[6]), int):
+            statusCodeTracker[arrayFromString[6]] += 1
+        fileSizeTracker += int(arrayFromString[7])
+        if lineCount == 10 or signal.signal(signal.SIGINT, handler):
+            print('File size: {}'.format(fileSizeTracker))
+            for key, value in statusCodeTracker.items():
+                if statusCode not in statusCodeTracker.keys():
+                    continue
+                print('{}: {}'.format(key, value))
+            lineCount = 0
+    except:
+        pass
