@@ -1,52 +1,52 @@
 #!/usr/bin/python3
-'''reads stdin line by line and computes metrics'''
-import re
 import sys
 import signal
 
-
-toMatch = re.compile(
-                     r'^\d{1,3}\.\d{1,3}\.\d{1,3} \
-                     \.\d{1,3}\s\-\s\[[0-9]{4}\-[0-9] \
-                     {1,2}\-[0-9]{1,2}\s[0-9]{1,2}\: \
-                     [0-9]{1,2}\:[0-9]{1,2}.[0-9]{1,6}\] \
-                     \s\"GET\s\/projects\/260\sHTTP\/ \
-                     1\.1\"\s\d{3}\s\d{1,4}$')
-statusCodeTracker = {
-    '200': 0,
-    '301': 0,
-    '400': 0,
-    '401': 0,
-    '403': 0,
-    '404': 0,
-    '405': 0,
-    '500': 0
-}
-fileSizeTracker = 0
-lineCount = 0
+# Initialize global variables
+total_size = 0
+status_codes = {}
 
 
-def handler():
-    return True
+# Define the signal handler for CTRL + C
+def signal_handler(signal, frame):
+    print_stats()
+    sys.exit(0)
 
 
-for line in sys.stdin:
-    lineCount += 1
-    if toMatch.match(line) is False:
-        continue
-    withoutDash = line.replace('-', '')
-    arrayFromString = withoutDash.split(' ')
+# Define the function to print statistics
+def print_stats():
+    print("Total file size: {}".format(total_size))
+    for code in sorted(status_codes):
+        print("{}: {}".format(code, status_codes[code]))
+
+
+# Set the signal handler for CTRL + C
+signal.signal(signal.SIGINT, signal_handler)
+
+# Read input from stdin line by line
+for line_num, line in enumerate(sys.stdin, start=1):
+    # Parse the input line
     try:
-        statusCode = int(arrayFromString[6])
-        if arrayFromString[5] and isinstance(int(arrayFromString[6]), int):
-            statusCodeTracker[arrayFromString[6]] += 1
-        fileSizeTracker += int(arrayFromString[7])
-        if lineCount == 10 or signal.signal(signal.SIGINT, handler):
-            print('File size: {}'.format(fileSizeTracker))
-            for key, value in statusCodeTracker.items():
-                if statusCode not in statusCodeTracker.keys():
-                    continue
-                print('{}: {}'.format(key, value))
-            lineCount = 0
-    except:
-        pass
+        ip, _, _, date, _, request, status_code, file_size, *_ = line.split()
+        if request != "GET /projects/260 HTTP/1.1":
+            continue
+        file_size = int(file_size)
+        status_code = int(status_code)
+    except ValueError:
+        continue
+
+    # Update the total file size
+    total_size += file_size
+
+    # Update the status code count
+    if status_code in status_codes:
+        status_codes[status_code] += 1
+    else:
+        status_codes[status_code] = 1
+
+    # Print statistics every 10 lines
+    if line_num % 10 == 0:
+        print_stats()
+
+# Print final statistics
+print_stats()
